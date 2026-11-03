@@ -27,34 +27,60 @@ When filtering files such as `node_modules/` or `.git/`, two things are taken in
 
 Background job prevents user from having to wait on the same screen until the repo is done being processed. Additionally if a response was lost, the user would still be able to check on the status of their repo
 
+## Status order
+
+* submitted, github checks run (`pending`)
+* Since cloning requires the entire repo to be downloaded over the network, it gets its own status (`cloning`)
+* Filtering, chunking, storing are steps that happen almost instantly so they have shared status (`processing`)
+* Storing will be split into its own status, since every chunks needs its own API call (`embedding`)
+* If those steps are successful (`complete`)
+* If a step failed, store failed step in `error` with the reason and step (`failed`)
+
+## Access control
+
+* Every request for a repo ID checks who's asking before returning anything
+* If the repo's `user_id`is not matched with the logged-in-user's ID, the users get back `404 Not Found` so a repo's existence is not revealed
+* This applies to every endpoint that takes a repo ID,  not just `GET/repo/{id}` since search and chat will need it to 
+
 ## Tables
 
-* Users
+Users
 
-  * Unique user ID (`id`)
-  * E-mail (`email`)
-  * Date created (`created_at`)
-  * Password hash (`password_hash`)
-* Repos
+* Unique user ID (`id`)
+* E-mail (`email`)
+* Date created (`created_at`)
+* Password hash (`password_hash`)
 
-  * Unique ID for repo URL (`id`)
-  * User ID (`user_id`)
-  * The GitHub URL submitted(`repo_url`)
-  * Any tags, if the user submitted any (e.g., v1.2.4) (`requested_ref`)
-  * Commit hash - exact commit ingested, which is filled in after checkout (`commit_hash`)
-  * Status (`status`)
-  * When it was created (`created_at`)
-* Chunks
+Repos
 
-  * Each row in this table represents a piece of code in the repo
-  * unique ID (`id`)
-  * repo ID (`repo_id`)
-  * file path (`file_path`)
-  * content (`content`)
-  * where the chunk sits in the file (line numbers) (`start_line`, `end_line`)
+* Unique ID for repo URL (`id`)
+* User ID (`user_id`)
+* The GitHub URL submitted(`repo_url`)
+* Any tags, if the user submitted any (e.g., v1.2.4) (`requested_ref`)
+* Commit hash - exact commit ingested, which is filled in after checkout (`commit_hash`)
+* Status (`status`)
+* When it was created (`created_at`)
 
-  ## Why
+Chunks
 
-  Foreign keys such as repos.user_id should point to users.id, and chunks.repo_id should point to repos.id in the case that a user decides to change their email in the future and do not want to lose the repos they have already submitted in the past.
+* Each row in this table represents a piece of code in the repo
+* unique ID (`id`)
+* repo ID (`repo_id`)
+* file path (`file_path`)
+* content (`content`)
+* where the chunk sits in the file (line numbers) (`start_line`, `end_line`
 
-  Repos often contain several files with the same name, which could lead to false passes in retrieval, having file path included in the tables keeps the chunks unambiguous.
+Embeddings
+
+* foreign key to `chunks.id` (`chunk_id`)
+* name of the embedding model (`model`)
+* the vector itself (`embedding`)
+* `chunk_id` + `model` together identify a row, since one chunk has at most one vector per model
+
+## Why
+
+Foreign keys such as repos.user_id should point to users.id, and chunks.repo_id should point to repos.id in the case that a user decides to change their email in the future and do not want to lose the repos they have already submitted in the past.
+
+Having a separate table for embeddings saves the trouble of having to overwrite old vectors when switching embedding models. If in the future, I decide to switch embedding models, having a separate table for vectors allows for the two models to sit side-by-side for an eval comparison, at the cost of having every search needing one extra join.
+
+Repos often contain several files with the same name, which could lead to false passes in retrieval, having file path included in the tables keeps the chunks unambiguous.
