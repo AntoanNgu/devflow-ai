@@ -4,8 +4,13 @@
 1. Format: does the text match the pattern of github.com/owner/repo? (no network call needed, just a text check)
 2. Exists: does github have this repo
 3. Public: can DevFlow access it without credentials
-4. Size: is it under the limit
+4. Size: Github size in KB (`MAX_REPO_SIZE_KB`)
+   1. Protects against downloading a huge repo at all, since cloning costs time and disk.
+   2. Quick since it only needs an API response
+   3. Comes from environment variables so the limits can change without code changes
+   4. If size check fails: set `status = failed`, with `error` showing actual size and limit link the repo to it and skip cloning.
 5. Tag exists: if the user passed a tag or commit, is it real
+   1. Once the tag is resolves to a commit hash, lookup a snapshot with that URL + hash, and if it already exists,
 
 Reasoning: This order was chosen based on cost. For the first bullet, if the user submits a repo URL that is invalid this would avoid having DevFlow from running on something other than a repo For steps 2-5. After checking for a valid url, devflow needs to know if this repo actually exist and can be accessed, as well as the size of the repo to avoid processing repos that are too large. Lastly check for tags or commits from the user that are valid, which all happen through Github's API, before cloning
 
@@ -18,6 +23,23 @@ Reasoning: This order was chosen based on cost. For the first bullet, if the use
 
 When filtering files such as `node_modules/` or `.git/`, two things are taken into account: cost and speed, and retrieval quality. Having fewer files to chunk, embed, and store makes processing faster and cheaper. When retrieving, chunks are ranked by how closely they match what the user is asking for, so without filtering, the top chunks could be library code instead of the user’s project. Retrieval quality is then improved with less noise competing with the code the user is asking for.
 
+* After filtering, before chunking: the remaining file count, which protects embeddings cost and time, because the filter might cut a large repo down to something small, or leave thousands of files. `(MAX_FILES)`
+* File count that is over `MAX_FILES`, set `status = failed`, with error showing actual count and limit
+* Comes from environment variables so the limits can change without code changes
+
+## Chunking 
+
+* Chunking by structure, python files that can be parsed with `ast`: One chunk per function or class
+* Functions that are too big for one chunk: Split function after 50 lines with fixed overlap so that context is not lost at edges
+* Everything else (JS, Markdown files, config files, Python that fails to parse): Fixed chunk size with overlap
+* Settings (configurable):
+  * Fixed chunk size: 50 lines
+  * Overlap: 10 lines
+  * Size limits: configurable, starting values, tuned later through evals.
+* Every strategy fills in `start_line` and `end_line`
+
+Chunking by functions keeps each function whole so retrieval returns complete code, and having the fallback prevents any files types from being left out, including READMEs
+
 ## Background job
 
 1. User submits a URL. DevFlow runs the fast format check, then creates a repo record in the database with a new ID and status = pending
@@ -25,9 +47,23 @@ When filtering files such as `node_modules/` or `.git/`, two things are taken in
 3. slow work runs in the background (more checks, clone, filter, chunk, store), updating the status as it goes
 4. the user checks GET /repos/{ID} to see the current status
 
+Worker queue
+
+* If the server restarts mid-job, the job still lives within Redis instead of dying with the process
+* Keeps the API responsive, since heavy work runs in a separate worker process
+* Redis is already in the stack for caching
+
+Reruns 
+
+* At the start of every job, delete this snapshots chunk's.
+* Prevents duplicate chunks from being stored after a crash occurred.
+* Embeddings point to chunks, so deleting chunks removes their own embeddings too via on-delete cascade
+
+
+
 Background job prevents user from having to wait on the same screen until the repo is done being processed. Additionally if a response was lost, the user would still be able to check on the status of their repo
 
-## Status order
+## Status order (with two users sharing one snapshot, where should the ingestion *status* live, on the snapshot or on each repo row?)
 
 * submitted, github checks run (`pending`)
 * Since cloning requires the entire repo to be downloaded over the network, it gets its own status (`cloning`)
@@ -53,26 +89,34 @@ Users
 
 Repos
 
-* Unique ID for repo URL (`id`)
+* Unique submission ID (`id`)
 * User ID (`user_id`)
 * The GitHub URL submitted(`repo_url`)
 * Any tags, if the user submitted any (e.g., v1.2.4) (`requested_ref`)
-* Commit hash - exact commit ingested, which is filled in after checkout (`commit_hash`)
+* The code version this submission uses (`snapshot_id`), foreign key to `snapshots.id`.
 * Status (`status`)
+* Error (`error`)
 * When it was created (`created_at`)
 
 Chunks
 
 * Each row in this table represents a piece of code in the repo
 * unique ID (`id`)
-* repo ID (`repo_id`)
+* Snapshot ID (`snapshot_id`), foreign key to `snapshots.id`.
 * file path (`file_path`)
 * content (`content`)
-* where the chunk sits in the file (line numbers) (`start_line`, `end_line`
+* where the chunk sits in the file (line numbers) (`start_line`, `end_line`)
+
+Snapshots 
+
+* Unique snapshot id (`id`)
+* The Github URL (`repo_url`)
+* Commit hash - exact commit ingested (`commit_hash`)
+* Are unique under `repo_url` + `commit_hash` so that the same code can't get two snapshot rows
 
 Embeddings
 
-* foreign key to `chunks.id` (`chunk_id`)
+* foreign key to `chunks.id` (`chunk_id`) - on delete cascade
 * name of the embedding model (`model`)
 * the vector itself (`embedding`)
 * `chunk_id` + `model` together identify a row, since one chunk has at most one vector per model
