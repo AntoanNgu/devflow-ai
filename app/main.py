@@ -1,15 +1,10 @@
 from fastapi import FastAPI
-from dotenv import load_dotenv
-from sqlalchemy import text, create_engine
+from app.db import engine 
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from fastapi.responses import JSONResponse
-import os
 
 app = FastAPI(title="devflow-ai")
-load_dotenv()
-url = os.environ.get("DATABASE_URL")
-engine = create_engine(url)
-
 
 @app.get("/health")
 def health():
