@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from app.main import app 
 import app.main as main_module
 
+
 client = TestClient(app)
 
 def test_health():
@@ -16,3 +17,6 @@ def test_health_db_unreachable(monkeypatch):
     response = client.get("/health")
     assert response.status_code == 503
     assert response.json() == {"status": "error", "database": "unreachable"}
+
+
+
