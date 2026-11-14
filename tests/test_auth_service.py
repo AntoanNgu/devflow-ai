@@ -20,13 +20,28 @@ class FakeUserRepository:
         return new_user
 
 
-service = AuthService(FakeUserRepository(), PasswordHash.recommended())
-
+    
 def test_register_returns_new_user():
     service = AuthService(FakeUserRepository(), PasswordHash.recommended())
     user = service.register("test@example.com", "hunter22")
     assert user.email == "test@example.com"
     assert user.id is not None 
+
+def test_register_duplicate_email_raises():
+    service = AuthService(FakeUserRepository(), PasswordHash.recommended())
+    service.register("test@example.com", "hunter22")
+    with pytest.raises(EmailAlreadyRegistered):
+        service.register("test@example.com", "hunter22")
+
+def test_register_hashes_password():
+    hasher = PasswordHash.recommended()
+    service = AuthService(FakeUserRepository(), hasher)
+    user = service.register("test@example.com", "hunter22")
+    assert user.password_hash != "hunter22"
+    assert hasher.verify("hunter22", user.password_hash)
+
+
+
     
 
 
