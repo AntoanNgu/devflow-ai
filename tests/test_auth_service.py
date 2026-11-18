@@ -2,6 +2,7 @@ from app.models import User
 from app.services import AuthService
 from app.exceptions import EmailAlreadyRegistered
 from pwdlib import PasswordHash
+from app.config import Settings
 import pytest
 
 class FakeUserRepository:
@@ -19,26 +20,26 @@ class FakeUserRepository:
         self.user_by_email[email] = new_user
         return new_user
 
-
+@pytest.fixture
+def auth_service():
+    service = AuthService(FakeUserRepository(), PasswordHash.recommended(), secret_key="test-secret", algorithm="HS256", expire_minutes=20)
+    return service
     
-def test_register_returns_new_user():
-    service = AuthService(FakeUserRepository(), PasswordHash.recommended())
-    user = service.register("test@example.com", "hunter22")
+def test_register_returns_new_user(auth_service):
+    
+    user = auth_service.register("test@example.com", "hunter22")
     assert user.email == "test@example.com"
     assert user.id is not None 
 
-def test_register_duplicate_email_raises():
-    service = AuthService(FakeUserRepository(), PasswordHash.recommended())
-    service.register("test@example.com", "hunter22")
+def test_register_duplicate_email_raises(auth_service):
+    auth_service.register("test@example.com", "hunter22")
     with pytest.raises(EmailAlreadyRegistered):
-        service.register("test@example.com", "hunter22")
+        auth_service.register("test@example.com", "hunter22")
 
-def test_register_hashes_password():
-    hasher = PasswordHash.recommended()
-    service = AuthService(FakeUserRepository(), hasher)
-    user = service.register("test@example.com", "hunter22")
+def test_register_hashes_password(auth_service):
+    user = auth_service.register("test@example.com", "hunter22")
     assert user.password_hash != "hunter22"
-    assert hasher.verify("hunter22", user.password_hash)
+    assert auth_service.hasher.verify("hunter22", user.password_hash)
 
 
 

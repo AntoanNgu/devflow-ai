@@ -9,6 +9,7 @@ from sqlalchemy.exc import OperationalError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pwdlib import PasswordHash
+from app.config import Settings
 
 app = FastAPI(title="devflow-ai")
 
@@ -24,7 +25,8 @@ def health():
 
 @app.post("/auth/register", status_code=201, response_model=UserResponse)
 def register(body: RegisterRequest, db: Session = Depends(get_db)):
-    service = AuthService(UserRepository(db), PasswordHash.recommended())
+    settings = Settings()
+    service = AuthService(UserRepository(db), PasswordHash.recommended(), secret_key=settings.jwt_secret_key, algorithm=settings.jwt_algorithm, expire_minutes=settings.access_token_expire_minutes)
     try:
         return service.register(body.email, body.password)
     except EmailAlreadyRegistered:
