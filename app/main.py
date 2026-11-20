@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pwdlib import PasswordHash
 from app.config import settings
+from app.dependencies import get_current_user
+from app.models import User
 
 app = FastAPI(title="devflow-ai")
 
@@ -39,5 +41,9 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         return TokenResponse(access_token=token)
     except InvalidCredentials:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+
+@app.get("/auth/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
     
