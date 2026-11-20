@@ -18,4 +18,14 @@ def test_get_by_email_returns_none_for_unknown_email(db_session):
     repo = UserRepository(db_session)
     found = repo.get_by_email(email="nobody@example.com")
     assert found is None
+
+def test_get_by_id_returns_same_email(db_session):
+    repo = UserRepository(db_session)
+    user = repo.create(email="test@example.com", password_hash="fakehasher")
+    found = repo.get_by_id(user_id=user.id)
+    assert found.email == "test@example.com"
+
+def test_missing_id_returns_none(db_session):
+    repo = UserRepository(db_session)
+    assert repo.get_by_id(0) is None
     

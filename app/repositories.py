@@ -17,5 +17,11 @@ class UserRepository:
         self.db.commit()
         self.db.refresh(new_user)
         return new_user
+
+    def get_by_id(self, user_id: int) -> User | None:
+        query = select(User).where(User.id == user_id)
+
+        return self.db.scalar(query)
+
         
 
