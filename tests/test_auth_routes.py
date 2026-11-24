@@ -44,3 +44,21 @@ def test_unknown_email(db_session):
     assert login_response.status_code == 401
     assert login_response.json()["detail"] == "Incorrect email or password"
 
+def test_me_with_valid_token(db_session):
+    register_response = client.post("/auth/register", json={"email": "test@example.com", "password": "stringisstring12"})
+    assert register_response.status_code == 201
+    login_response = client.post("/auth/login", json={"email": "test@example.com", "password": "stringisstring12"})
+    assert login_response.status_code == 200
+    data = login_response.json()
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    me_response = client.get("/auth/me", headers=headers)
+    me_data = me_response.json()
+    assert me_response.status_code == 200
+    assert me_data["email"] == "test@example.com"
+    assert "password_hash" not in me_data
+
+def test_me_without_token(db_session):
+    me_response = client.get("/auth/me")
+    assert me_response.status_code == 401
+    assert me_response.json()["detail"] == "Could not validate credentials"
