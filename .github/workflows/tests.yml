@@ -1,0 +1,32 @@
+name: tests
+on: [push, pull_request]
+
+jobs: 
+    tests: 
+        runs-on: ubuntu-latest
+
+        services: 
+          postgres: 
+            image: pgvector/pgvector:pg17
+            env:
+                POSTGRES_USER: devflow_test_user
+                POSTGRES_PASSWORD: Testuser123
+                POSTGRES_DB: devflow_test
+            ports:
+                - 5432:5432
+            options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 5
+        
+        env:
+            DATABASE_URL: postgresql+psycopg://devflow_test_user:Testuser123@localhost:5432/devflow_test
+            TEST_DATABASE_URL: postgresql+psycopg://devflow_test_user:Testuser123@localhost:5432/devflow_test
+            JWT_SECRET_KEY: abcdefghijklmnopqrstuvqwxyz123456
+          
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with: 
+                python-version: "3.13"
+            - run: pip install -r requirements.txt
+            - run: pytest
+
+
