@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from app.models import User
+from app.models import User, Repo
 
 class UserRepository:
     def __init__(self, db: Session):
@@ -23,5 +23,14 @@ class UserRepository:
 
         return self.db.scalar(query)
 
-        
+class RepoRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create(self, user_id: int, repo_url: str, requested_ref: str | None) -> Repo:
+        new_repo = Repo(user_id=user_id, repo_url=repo_url, requested_ref=requested_ref)
+        self.db.add(new_repo)
+        self.db.commit()
+        self.db.refresh(new_repo)
+        return new_repo
 

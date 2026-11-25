@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from app.db import engine, get_db 
-from app.schemas import RegisterRequest, UserResponse, LoginRequest, TokenResponse
-from app.repositories import UserRepository
+from app.schemas import RegisterRequest, UserResponse, LoginRequest, TokenResponse, RepoResponse, RepoCreate
+from app.repositories import UserRepository, RepoRepository
 from app.services import AuthService
 from app.exceptions import EmailAlreadyRegistered, InvalidCredentials
 from sqlalchemy import text
@@ -45,5 +45,9 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 @app.get("/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@app.post("/repos", status_code=201, response_model=RepoResponse)
+def create_repo(body: RepoCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return RepoRepository(db).create(current_user.id, body.repo_url, body.requested_ref)
 
     
