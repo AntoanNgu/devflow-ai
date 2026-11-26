@@ -12,6 +12,11 @@ os.environ["DATABASE_URL"] = url
 from app.db import SessionLocal
 from app.models import Repo, User
 
+from app.main import app
+from fastapi.testclient import TestClient
+
+client = TestClient(app)
+
 @pytest.fixture(scope="session", autouse=True)
 def apply_migrations():
     command.upgrade(Config("alembic.ini"), "head")
@@ -26,4 +31,18 @@ def db_session():
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def auth_headers(db_session):
+    register_response = client.post("/auth/register", json={"email": "test@example.com", "password": "stringisstring12"})
+    assert register_response.status_code == 201
+    login_response = client.post("/auth/login", json={"email": "test@example.com", "password": "stringisstring12"})
+    assert login_response.status_code == 200
+    data = login_response.json()
+    token = data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    return headers 
+    
+
 
