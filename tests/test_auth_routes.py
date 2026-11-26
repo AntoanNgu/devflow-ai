@@ -1,5 +1,8 @@
 from fastapi.testclient import TestClient
 from app.main import app
+import jwt
+from datetime import datetime, timedelta, timezone
+from app.config import settings 
 
 client = TestClient(app)
 
@@ -62,3 +65,16 @@ def test_me_without_token(db_session):
     me_response = client.get("/auth/me")
     assert me_response.status_code == 401
     assert me_response.json()["detail"] == "Could not validate credentials"
+
+def test_garbage_token():
+    response = client.get("/auth/me", headers={"Authorization": "Bearer not-a-real-token"})
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Could not validate credentials"
+
+def test_expired_token():
+    exp = datetime.now(timezone.utc) - timedelta(minutes=settings.access_token_expire_minutes)
+    token = jwt.encode({"sub": "1", "exp": exp}, key=settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get("/auth/me", headers=headers)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Could not validate credentials"
